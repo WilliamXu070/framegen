@@ -1,0 +1,80 @@
+# Default Configuration for Frame Generation Application
+
+# Model Configuration
+model:
+  name: "FrameInterpolationNet"
+  architecture: "optical_flow_based"  # Options: optical_flow_based, deep_learning, hybrid
+  input_channels: 3
+  output_channels: 3
+  hidden_dim: 256
+  num_layers: 4
+  dropout: 0.1
+
+# Training Configuration
+training:
+  batch_size: 16  # Increased for RTX 5070 (24GB VRAM)
+  learning_rate: 0.001
+  num_epochs: 100
+  validation_split: 0.2
+  early_stopping_patience: 10
+  save_interval: 5
+  device: "cuda"  # Options: cuda, cpu, auto
+  gradient_accumulation_steps: 1
+  warmup_epochs: 5
+
+# Data Configuration
+data:
+  input_fps: 15  # Original video FPS
+  target_fps: 60  # Target FPS after interpolation
+  frame_size: [512, 512]  # [width, height] - Increased for RTX 5070
+  augmentation:
+    enabled: true
+    rotation_range: 10
+    brightness_range: 0.2
+    contrast_range: 0.2
+    horizontal_flip: true
+
+# UCF101 Dataset Configuration
+ucf101:
+  enabled: true  # Enable UCF101 dataset
+  interpolation_factor: 4  # Frames to generate between existing frames
+  min_frames_per_video: 10  # Minimum frames per video
+  download_from_huggingface: true  # Download from Hugging Face
+  alternative_download: true  # Enable alternative download if HF fails
+  train_ratio: 0.7  # Training set ratio
+  val_ratio: 0.15   # Validation set ratio
+  test_ratio: 0.15  # Test set ratio
+  stratified_split: true  # Use stratified splitting by class
+  quality_check: true  # Enable quality checks
+
+# Paths
+paths:
+  data_dir: "data"
+  models_dir: "models"
+  logs_dir: "logs"
+  output_dir: "output"
+  train_data: "data/train"
+  val_data: "data/validation"
+  test_data: "data/test"
+
+# Inference Configuration
+inference:
+  interpolation_factor: 4  # How many frames to generate between existing frames
+  temporal_smoothing: true
+  post_processing: true
+  quality_threshold: 0.8
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/frame_generation.log"
+
+# Hardware Configuration
+hardware:
+  num_workers: 8  # Increased for Windows PC
+  pin_memory: true
+  mixed_precision: true
+  compile_model: true  # Enable PyTorch 2.0 compilation for RTX 5070
+  cuda_benchmark: true  # Enable CUDA benchmarking for RTX 5070
+  memory_efficient_attention: true  # Use memory efficient attention
