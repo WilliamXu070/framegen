@@ -150,3 +150,6 @@ output/
 # OS
 .DS_Store
 Thumbs.db
+
+# Ignore dataset folder
+data/UCF101/

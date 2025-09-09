@@ -233,6 +233,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - PyTorch for deep learning framework
 - TensorBoard for training visualization
 - The computer vision research community for frame interpolation techniques
-# framegen
-# framegen
-# framegen

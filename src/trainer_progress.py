@@ -1,5 +1,5 @@
 """
-Training pipeline for frame interpolation models.
+Enhanced trainer with progress tracking UI for frame interpolation models.
 """
 
 import torch
@@ -18,22 +18,19 @@ from src.models.frame_interpolation import create_model
 from src.data.dataset import create_data_loaders
 from src.data.ucf101_dataset import UCF101DatasetManager
 from src.data.ucf101_dataset_loader import create_ucf101_data_loaders
+from src.data.progress_dataset_manager import ProgressUCF101DatasetManager
 from src.utils.logger import setup_logger
+from src.utils.progress_ui import progress_ui, TrainingProgressTracker
 from src.utils.memory_manager import setup_memory_optimization, clear_cuda_cache
 from src.config import Config
 
 logger = logging.getLogger(__name__)
 
-class FrameInterpolationTrainer:
-    """Trainer class for frame interpolation models."""
+class ProgressFrameInterpolationTrainer:
+    """Enhanced trainer with progress tracking UI."""
     
     def __init__(self, config: Config):
-        """
-        Initialize trainer.
-        
-        Args:
-            config: Configuration object
-        """
+        """Initialize trainer with progress tracking."""
         self.config = config
         self.device = self._setup_device()
         
@@ -44,8 +41,7 @@ class FrameInterpolationTrainer:
         # RTX 5070 model compilation for better performance
         if config.get('hardware.compile_model', False) and hasattr(torch, 'compile'):
             try:
-                # Use default mode instead of max-autotune for Windows compatibility
-                self.model = torch.compile(self.model, mode='default')
+                self.model = torch.compile(self.model, mode='max-autotune')
                 logger.info("Model compiled for RTX 5070 optimization")
             except Exception as e:
                 logger.warning(f"Model compilation failed: {e}")
@@ -75,27 +71,30 @@ class FrameInterpolationTrainer:
         # Initialize memory manager
         self.memory_manager = setup_memory_optimization(config.config)
         
-        logger.info(f"Trainer initialized with device: {self.device}")
+        # Progress tracking
+        self.progress_tracker = None
+        
+        logger.info(f"Progress trainer initialized with device: {self.device}")
         logger.info(f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
         self.memory_manager.log_memory_status()
     
     def _setup_data_loaders(self):
-        """Setup data loaders with UCF101 dataset support."""
+        """Setup data loaders with UCF101 dataset support and progress tracking."""
         ucf101_config = self.config.get('ucf101', {})
         
         if ucf101_config.get('enabled', False):
-            logger.info("Setting up UCF101 dataset...")
+            logger.info("Setting up UCF101 dataset with progress tracking...")
             
-            # Initialize UCF101 dataset manager
-            self.ucf101_manager = UCF101DatasetManager(self.config.config)
+            # Initialize progress dataset manager
+            self.ucf101_manager = ProgressUCF101DatasetManager(self.config.config)
             
-            # Prepare UCF101 dataset
+            # Prepare UCF101 dataset with progress tracking
             if not self.ucf101_manager.prepare_dataset():
                 logger.error("Failed to prepare UCF101 dataset, falling back to standard dataset")
                 self.train_loader, self.val_loader = create_data_loaders(self.config.config)
                 return
             
-            # Validate dataset
+            # Validate dataset with progress tracking
             if not self.ucf101_manager.validate_dataset():
                 logger.error("UCF101 dataset validation failed, falling back to standard dataset")
                 self.train_loader, self.val_loader = create_data_loaders(self.config.config)
@@ -168,17 +167,19 @@ class FrameInterpolationTrainer:
         return CombinedLoss()
     
     def train_epoch(self) -> Dict[str, float]:
-        """Train for one epoch with RTX 5070 optimizations."""
+        """Train for one epoch with progress tracking."""
         self.model.train()
         total_loss = 0.0
         num_batches = len(self.train_loader)
         
-        progress_bar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch}")
+        # Update progress tracker for batch progress
+        if self.progress_tracker:
+            self.progress_tracker.total_batches = num_batches
         
         # RTX 5070 mixed precision setup
         use_amp = self.config.get('hardware.mixed_precision', False) and self.device.type == 'cuda'
         
-        for batch_idx, batch in enumerate(progress_bar):
+        for batch_idx, batch in enumerate(self.train_loader):
             # Move data to device with non_blocking for RTX 5070
             frame1 = batch['frame1'].to(self.device, non_blocking=True)
             frame2 = batch['frame2'].to(self.device, non_blocking=True)
@@ -224,13 +225,14 @@ class FrameInterpolationTrainer:
                 logger.warning("High memory usage detected, cleaning up...")
                 self.memory_manager.cleanup_memory(force=True)
             
-            # Update progress bar
-            progress_bar.set_postfix({
-                'Loss': f'{loss.item() * self.gradient_accumulation_steps:.4f}',
-                'Avg Loss': f'{total_loss / (batch_idx + 1):.4f}',
-                'Device': str(self.device),
-                'Mem': f'{self.memory_manager.check_memory_usage():.1%}'
-            })
+            # Update progress tracker for batch progress
+            if self.progress_tracker:
+                self.progress_tracker.update_batch(
+                    batch_idx + 1, 
+                    num_batches, 
+                    loss.item() * self.gradient_accumulation_steps,
+                    f"Batch {batch_idx + 1}/{num_batches} (Mem: {self.memory_manager.check_memory_usage():.1%})"
+                )
             
             # Log to tensorboard
             global_step = self.current_epoch * num_batches + batch_idx
@@ -248,7 +250,7 @@ class FrameInterpolationTrainer:
         num_batches = len(self.val_loader)
         
         with torch.no_grad():
-            for batch in tqdm(self.val_loader, desc="Validation"):
+            for batch in self.val_loader:
                 # Move data to device
                 frame1 = batch['frame1'].to(self.device)
                 frame2 = batch['frame2'].to(self.device)
@@ -315,60 +317,89 @@ class FrameInterpolationTrainer:
         logger.info(f"Loaded checkpoint from epoch {self.current_epoch}")
     
     def train(self):
-        """Main training loop."""
+        """Main training loop with progress tracking."""
         training_config = self.config.training_config
         num_epochs = training_config.get('num_epochs', 100)
         save_interval = training_config.get('save_interval', 5)
         early_stopping_patience = training_config.get('early_stopping_patience', 10)
         
-        logger.info(f"Starting training for {num_epochs} epochs")
+        # Start progress tracking
+        self.progress_tracker = progress_ui.start_training(num_epochs)
         
-        for epoch in range(self.current_epoch, num_epochs):
-            self.current_epoch = epoch
-            start_time = time.time()
-            
-            # Train epoch
-            train_metrics = self.train_epoch()
-            
-            # Validate epoch
-            val_metrics = self.validate_epoch()
-            
-            # Update learning rate
-            self.scheduler.step(val_metrics['val_loss'])
-            
-            # Log metrics
-            epoch_time = time.time() - start_time
-            logger.info(f"Epoch {epoch}: Train Loss: {train_metrics['train_loss']:.4f}, "
-                       f"Val Loss: {val_metrics['val_loss']:.4f}, "
-                       f"Val PSNR: {val_metrics['val_psnr']:.2f}, "
-                       f"Val SSIM: {val_metrics['val_ssim']:.4f}, "
-                       f"Time: {epoch_time:.2f}s")
-            
-            # Log to tensorboard
-            self.writer.add_scalar('Epoch/Train_Loss', train_metrics['train_loss'], epoch)
-            self.writer.add_scalar('Epoch/Val_Loss', val_metrics['val_loss'], epoch)
-            self.writer.add_scalar('Epoch/Val_PSNR', val_metrics['val_psnr'], epoch)
-            self.writer.add_scalar('Epoch/Val_SSIM', val_metrics['val_ssim'], epoch)
-            self.writer.add_scalar('Epoch/Learning_Rate', self.optimizer.param_groups[0]['lr'], epoch)
-            
-            # Save checkpoint
-            is_best = val_metrics['val_loss'] < self.best_val_loss
-            if is_best:
-                self.best_val_loss = val_metrics['val_loss']
-                self.patience_counter = 0
-            else:
-                self.patience_counter += 1
-            
-            if epoch % save_interval == 0 or is_best:
-                self.save_checkpoint(epoch, val_metrics, is_best)
-            
-            # Early stopping
-            if self.patience_counter >= early_stopping_patience:
-                logger.info(f"Early stopping triggered after {epoch} epochs")
-                break
+        # Suppress this log to avoid interfering with progress bar
+        # logger.info(f"Starting training for {num_epochs} epochs with progress tracking")
         
-        logger.info("Training completed!")
-        self.writer.close()
+        try:
+            for epoch in range(self.current_epoch, num_epochs):
+                self.current_epoch = epoch
+                start_time = time.time()
+                
+                # Train epoch
+                train_metrics = self.train_epoch()
+                
+                # Validate epoch
+                val_metrics = self.validate_epoch()
+                
+                # Update learning rate
+                self.scheduler.step(val_metrics['val_loss'])
+                
+                # Calculate epoch time
+                epoch_time = time.time() - start_time
+                
+                # Update progress tracker
+                if self.progress_tracker:
+                    self.progress_tracker.update_epoch(
+                        epoch,
+                        train_metrics['train_loss'],
+                        val_metrics['val_loss'],
+                        val_metrics['val_psnr'],
+                        val_metrics['val_ssim'],
+                        self.optimizer.param_groups[0]['lr'],
+                        epoch_time,
+                        f"Epoch {epoch} completed"
+                    )
+                
+                # Log metrics (suppressed during progress tracking to avoid newlines)
+                # The progress UI will display this information instead
+                pass
+                
+                # Log to tensorboard
+                self.writer.add_scalar('Epoch/Train_Loss', train_metrics['train_loss'], epoch)
+                self.writer.add_scalar('Epoch/Val_Loss', val_metrics['val_loss'], epoch)
+                self.writer.add_scalar('Epoch/Val_PSNR', val_metrics['val_psnr'], epoch)
+                self.writer.add_scalar('Epoch/Val_SSIM', val_metrics['val_ssim'], epoch)
+                self.writer.add_scalar('Epoch/Learning_Rate', self.optimizer.param_groups[0]['lr'], epoch)
+                
+                # Save checkpoint
+                is_best = val_metrics['val_loss'] < self.best_val_loss
+                if is_best:
+                    self.best_val_loss = val_metrics['val_loss']
+                    self.patience_counter = 0
+                else:
+                    self.patience_counter += 1
+                
+                if epoch % save_interval == 0 or is_best:
+                    self.save_checkpoint(epoch, val_metrics, is_best)
+                
+                # Early stopping
+                if self.patience_counter >= early_stopping_patience:
+                    # Suppress this log to avoid interfering with progress bar
+                    # logger.info(f"Early stopping triggered after {epoch} epochs")
+                    break
+            
+            # Finish progress tracking
+            progress_ui.finish_current("Training completed successfully!")
+            logger.info("Training completed!")
+            
+        except KeyboardInterrupt:
+            progress_ui.finish_current("Training interrupted by user")
+            logger.info("Training interrupted by user")
+        except Exception as e:
+            progress_ui.finish_current(f"Training failed: {e}")
+            logger.error(f"Training failed: {e}")
+            raise
+        finally:
+            self.writer.close()
 
 class CombinedLoss(nn.Module):
     """Combined loss function for frame interpolation with color-aware terms."""

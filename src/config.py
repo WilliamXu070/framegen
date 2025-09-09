@@ -10,27 +10,32 @@ from typing import Dict, Any, Optional
 class Config:
     """Configuration manager for the application."""
     
-    def __init__(self, config_path: str):
+    def __init__(self, config_path_or_dict):
         """
-        Initialize configuration from YAML file.
+        Initialize configuration from YAML file or dictionary.
         
         Args:
-            config_path: Path to the configuration YAML file
+            config_path_or_dict: Path to the configuration YAML file or dictionary
         """
-        self.config_path = config_path
-        self.config = self._load_config()
+        self.config_path = config_path_or_dict if isinstance(config_path_or_dict, str) else None
+        self.config = self._load_config(config_path_or_dict)
         self._create_directories()
     
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from YAML file."""
-        try:
-            with open(self.config_path, 'r') as file:
-                config = yaml.safe_load(file)
-            return config
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing configuration file: {e}")
+    def _load_config(self, config_path_or_dict) -> Dict[str, Any]:
+        """Load configuration from YAML file or dictionary."""
+        if isinstance(config_path_or_dict, dict):
+            return config_path_or_dict
+        elif isinstance(config_path_or_dict, str):
+            try:
+                with open(config_path_or_dict, 'r') as file:
+                    config = yaml.safe_load(file)
+                return config
+            except FileNotFoundError:
+                raise FileNotFoundError(f"Configuration file not found: {config_path_or_dict}")
+            except yaml.YAMLError as e:
+                raise ValueError(f"Error parsing configuration file: {e}")
+        else:
+            raise ValueError("config_path_or_dict must be a string (file path) or dictionary")
     
     def _create_directories(self):
         """Create necessary directories if they don't exist."""

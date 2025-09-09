@@ -12,21 +12,21 @@ model:
 
 # Training Configuration
 training:
-  batch_size: 16  # Increased for RTX 5070 (24GB VRAM)
+  batch_size: 8  # Conservative for RTX 5070 (24GB VRAM)
   learning_rate: 0.001
-  num_epochs: 100
+  num_epochs: 50  # Reduced for testing
   validation_split: 0.2
   early_stopping_patience: 10
   save_interval: 5
   device: "cuda"  # Options: cuda, cpu, auto
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 2  # Increased for memory efficiency
   warmup_epochs: 5
 
 # Data Configuration
 data:
   input_fps: 15  # Original video FPS
   target_fps: 60  # Target FPS after interpolation
-  frame_size: [512, 512]  # [width, height] - Increased for RTX 5070
+  frame_size: [256, 256]  # [width, height] - Conservative for RTX 5070
   augmentation:
     enabled: true
     rotation_range: 10
@@ -36,7 +36,7 @@ data:
 
 # UCF101 Dataset Configuration
 ucf101:
-  enabled: true  # Enable UCF101 dataset
+  enabled: false  # Enable UCF101 dataset
   interpolation_factor: 4  # Frames to generate between existing frames
   min_frames_per_video: 10  # Minimum frames per video
   download_from_huggingface: true  # Download from Hugging Face
@@ -72,9 +72,14 @@ logging:
 
 # Hardware Configuration
 hardware:
-  num_workers: 8  # Increased for Windows PC
+  num_workers: 4  # Conservative for Windows PC
   pin_memory: true
-  mixed_precision: true
-  compile_model: true  # Enable PyTorch 2.0 compilation for RTX 5070
+  mixed_precision: false  # Disable for stability
+  compile_model: false  # Disable for stability
   cuda_benchmark: true  # Enable CUDA benchmarking for RTX 5070
   memory_efficient_attention: true  # Use memory efficient attention
+  dataloader_pin_memory: true
+  persistent_workers: false
+  prefetch_factor: 2
+  memory_fraction: 0.8  # Use 80% of GPU memory for RTX 5070
+  allow_growth: true

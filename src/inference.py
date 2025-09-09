@@ -114,6 +114,20 @@ class FrameInterpolationInference:
         # Remove batch dimension and move to CPU
         frame = frame_tensor.squeeze(0).cpu().numpy()
         
+        # Debug: print shape (commented out for production)
+        # print(f"Model output shape: {frame.shape}")
+        
+        # Ensure we have 3 channels
+        if len(frame.shape) == 3 and frame.shape[0] == 3:
+            # Transpose from CHW to HWC
+            frame = frame.transpose(1, 2, 0)
+        elif len(frame.shape) == 2:
+            # Convert grayscale to RGB
+            frame = np.stack([frame] * 3, axis=-1)
+        
+        # Clamp values to [0, 1] range (since model uses Tanh activation)
+        frame = np.clip((frame + 1) / 2, 0, 1)
+        
         # Denormalize from [0, 1] to [0, 255]
         frame = (frame * 255.0).astype(np.uint8)
         

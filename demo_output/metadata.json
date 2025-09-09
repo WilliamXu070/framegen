@@ -1,0 +1,11 @@
+{
+  "interpolation_factor": 2,
+  "original_frames_count": 6,
+  "interpolated_frames_count": 16,
+  "frame_shape": [
+    256,
+    256,
+    3
+  ],
+  "total_frames": 16
+}
