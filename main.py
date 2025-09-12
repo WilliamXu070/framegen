@@ -25,71 +25,64 @@ from src.trainer import FrameInterpolationTrainer
 from src.inference import FrameInterpolationInference
 from src.data.ucf101_dataset import UCF101DatasetManager
 from src.data.ucf101_dataset_loader import create_ucf101_data_loaders
+from src.data.ucf101_processor import UCF101Processor
 from src.utils.logger import setup_logger
+from src.utils.video_utils import VideoProcessor
 
 def load_ucf101_demo_frames(config, num_videos=3, frames_per_video=5):
     """Load demo frames from UCF101 dataset."""
     logger = setup_logger()
     logger.info("Loading UCF101 dataset for demo...")
     
-    # Initialize UCF101 dataset manager
-    ucf101_manager = UCF101DatasetManager(config.config)
+    # Initialize UCF101 processor
+    ucf101_processor = UCF101Processor(config.config)
     
-    # Check if dataset is downloaded
-    if not ucf101_manager.is_dataset_downloaded():
-        logger.info("UCF101 dataset not found. Downloading from Hugging Face...")
-        if not ucf101_manager.prepare_dataset():
-            logger.error("Failed to download UCF101 dataset. Falling back to synthetic frames.")
+    # Check if dataset is processed
+    if not ucf101_processor.is_processed():
+        logger.info("UCF101 dataset not processed. Processing dataset...")
+        if not ucf101_processor.process_dataset():
+            logger.error("Failed to process UCF101 dataset. Falling back to synthetic frames.")
             return create_synthetic_fallback_frames(num_videos * frames_per_video)
     
-    # Validate dataset
-    if not ucf101_manager.validate_dataset():
-        logger.error("UCF101 dataset validation failed. Falling back to synthetic frames.")
-        return create_synthetic_fallback_frames(num_videos * frames_per_video)
-    
     # Get dataset info
-    dataset_info = ucf101_manager.get_dataset_info()
+    dataset_info = ucf101_processor.get_processed_info()
     logger.info(f"UCF101 dataset info: {dataset_info}")
     
-    # Load a few sample videos
+    # Load frames from processed dataset
     demo_frames = []
-    video_files = list(ucf101_manager.raw_dir.glob('*.avi'))
+    train_dir = ucf101_processor.train_dir
+    video_dirs = list(train_dir.glob('video_*'))
     
-    if not video_files:
-        logger.error("No video files found in UCF101 dataset. Falling back to synthetic frames.")
+    if not video_dirs:
+        logger.error("No processed videos found in UCF101 dataset. Falling back to synthetic frames.")
         return create_synthetic_fallback_frames(num_videos * frames_per_video)
     
     # Select random videos for demo
-    selected_videos = random.sample(video_files, min(num_videos, len(video_files)))
+    selected_videos = random.sample(video_dirs, min(num_videos, len(video_dirs)))
     
-    for video_path in selected_videos:
-        logger.info(f"Processing video: {video_path.name}")
+    for video_dir in selected_videos:
+        logger.info(f"Processing video: {video_dir.name}")
         
-        # Extract frames from video
-        cap = cv2.VideoCapture(str(video_path))
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # Get frame files
+        frame_files = sorted(list(video_dir.glob('frame_*.jpg')))
         
-        if frame_count < frames_per_video:
-            logger.warning(f"Video {video_path.name} has only {frame_count} frames, skipping")
-            cap.release()
+        if len(frame_files) < frames_per_video:
+            logger.warning(f"Video {video_dir.name} has only {len(frame_files)} frames, skipping")
             continue
         
         # Sample frames evenly
-        frame_indices = np.linspace(0, frame_count - 1, frames_per_video, dtype=int)
+        frame_indices = np.linspace(0, len(frame_files) - 1, frames_per_video, dtype=int)
         
         for frame_idx in frame_indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = cap.read()
+            frame_path = frame_files[frame_idx]
+            frame = cv2.imread(str(frame_path))
             
-            if ret:
-                # Resize frame to match config
-                frame_size = tuple(config.data_config.get('frame_size', [256, 256]))
-                frame = cv2.resize(frame, frame_size)
+            if frame is not None:
+                # Convert BGR to RGB
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 demo_frames.append(frame)
             else:
-                logger.warning(f"Failed to read frame {frame_idx} from {video_path.name}")
-        
-        cap.release()
+                logger.warning(f"Failed to read frame {frame_path}")
     
     if not demo_frames:
         logger.error("No frames extracted from UCF101 dataset. Falling back to synthetic frames.")
@@ -326,11 +319,135 @@ def save_demo_results(original_frames, interpolated_frames, interpolation_factor
     logger.info(f"Original frames shape: {original_array.shape}")
     logger.info(f"Interpolated frames shape: {interpolated_array.shape}")
 
+def run_test_mode(config, args):
+    """Run testing mode for video generation with frame interpolation."""
+    logger = setup_logger()
+    logger.info("Starting testing mode for video generation")
+    
+    # Check if model exists
+    model_path = args.model or 'models/best_model.pth'
+    if not os.path.exists(model_path):
+        logger.error(f"Model not found at {model_path}. Please train the model first or specify --model path")
+        return
+    
+    # Check if test video is provided
+    if not args.test_video:
+        logger.error("Test video path is required for testing mode. Use --test-video path/to/video.mp4")
+        return
+    
+    if not os.path.exists(args.test_video):
+        logger.error(f"Test video not found at {args.test_video}")
+        return
+    
+    # Create output directory
+    output_dir = Path(args.test_output_dir)
+    output_dir.mkdir(exist_ok=True)
+    
+    # Initialize inference
+    logger.info("Loading trained model...")
+    inference = FrameInterpolationInference(config, model_path)
+    
+    # Extract frames from test video
+    logger.info(f"Extracting frames from test video: {args.test_video}")
+    video_processor = VideoProcessor()
+    original_frames = video_processor.extract_frames(args.test_video)
+    
+    if len(original_frames) < 2:
+        logger.error("Test video must contain at least 2 frames")
+        return
+    
+    logger.info(f"Extracted {len(original_frames)} frames from test video")
+    
+    # Generate interpolated frames
+    logger.info(f"Generating interpolated frames with {args.test_fps_multiplier}x FPS enhancement...")
+    interpolated_frames = []
+    
+    # Add first frame
+    interpolated_frames.append(original_frames[0])
+    
+    # Process each consecutive frame pair
+    for i in range(len(original_frames) - 1):
+        frame1 = original_frames[i]
+        frame2 = original_frames[i + 1]
+        
+        # Interpolate frames between the pair (1 frame for 2x FPS)
+        interpolated = inference.interpolate_frame_pair(frame1, frame2, 1)
+        interpolated_frames.extend(interpolated)
+        
+        # Add the second frame
+        interpolated_frames.append(frame2)
+    
+    logger.info(f"Generated {len(interpolated_frames)} total frames")
+    
+    # Get original video properties
+    cap = cv2.VideoCapture(args.test_video)
+    original_fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    
+    # Calculate new FPS
+    new_fps = original_fps * args.test_fps_multiplier
+    
+    # Save original video (resampled to show comparison)
+    original_video_path = output_dir / "original_video.mp4"
+    video_processor.save_frames_as_video(original_frames, str(original_video_path), original_fps)
+    logger.info(f"Original video saved to: {original_video_path}")
+    
+    # Save enhanced video with interpolated frames
+    enhanced_video_path = output_dir / "enhanced_video.mp4"
+    video_processor.save_frames_as_video(interpolated_frames, str(enhanced_video_path), new_fps)
+    logger.info(f"Enhanced video saved to: {enhanced_video_path}")
+    
+    # Save frame-by-frame comparison
+    save_frame_comparison(original_frames, interpolated_frames, output_dir)
+    
+    # Print results
+    print(f"\n{'='*60}")
+    print("TEST MODE RESULTS")
+    print(f"{'='*60}")
+    print(f"Original video: {args.test_video}")
+    print(f"Original frames: {len(original_frames)}")
+    print(f"Enhanced frames: {len(interpolated_frames)}")
+    print(f"Original FPS: {original_fps:.2f}")
+    print(f"Enhanced FPS: {new_fps:.2f}")
+    print(f"FPS multiplier: {args.test_fps_multiplier}x")
+    print(f"Output directory: {output_dir}")
+    print(f"Original video saved: {original_video_path}")
+    print(f"Enhanced video saved: {enhanced_video_path}")
+    print(f"{'='*60}")
+    
+    logger.info("Testing mode completed successfully!")
+
+def save_frame_comparison(original_frames, interpolated_frames, output_dir):
+    """Save frame-by-frame comparison images."""
+    logger = setup_logger()
+    logger.info("Saving frame-by-frame comparison...")
+    
+    comparison_dir = output_dir / "frame_comparison"
+    comparison_dir.mkdir(exist_ok=True)
+    
+    # Save original frames
+    original_dir = comparison_dir / "original"
+    original_dir.mkdir(exist_ok=True)
+    
+    for i, frame in enumerate(original_frames):
+        frame_path = original_dir / f"frame_{i:04d}.jpg"
+        cv2.imwrite(str(frame_path), frame)
+    
+    # Save interpolated frames
+    interpolated_dir = comparison_dir / "interpolated"
+    interpolated_dir.mkdir(exist_ok=True)
+    
+    for i, frame in enumerate(interpolated_frames):
+        frame_path = interpolated_dir / f"frame_{i:04d}.jpg"
+        cv2.imwrite(str(frame_path), frame)
+    
+    logger.info(f"Frame comparison saved to: {comparison_dir}")
+
 def main():
     """Main entry point for the frame generation application."""
     parser = argparse.ArgumentParser(description='Frame Generation Application')
-    parser.add_argument('--mode', choices=['train', 'inference', 'demo'], required=True,
-                       help='Mode: train the model, run inference, or run visual demonstration')
+    parser.add_argument('--mode', choices=['train', 'inference', 'demo', 'test'], required=True,
+                       help='Mode: train the model, run inference, run visual demonstration, or test video generation')
     parser.add_argument('--config', type=str, default='configs/default.yaml',
                        help='Path to configuration file')
     parser.add_argument('--input', type=str, help='Input video path for inference')
@@ -340,6 +457,10 @@ def main():
     parser.add_argument('--interpolation-factor', type=int, default=3, help='Number of frames to interpolate between each pair')
     parser.add_argument('--no-display', action='store_true', help='Skip matplotlib display and only show console output')
     parser.add_argument('--num-videos', type=int, default=2, help='Number of UCF101 videos to sample from')
+    parser.add_argument('--light-loading', action='store_true', help='Use light loading mode with only 100 training videos for faster testing')
+    parser.add_argument('--test-video', type=str, help='Path to test video for testing mode')
+    parser.add_argument('--test-output-dir', type=str, default='demo', help='Output directory for test videos')
+    parser.add_argument('--test-fps-multiplier', type=int, default=2, help='FPS multiplier for test videos (e.g., 2 for 2x FPS)')
     
     args = parser.parse_args()
     
@@ -351,7 +472,7 @@ def main():
     config = Config(args.config)
     
     if args.mode == 'train':
-        trainer = FrameInterpolationTrainer(config)
+        trainer = FrameInterpolationTrainer(config, light_loading=args.light_loading)
         trainer.train()
     elif args.mode == 'inference':
         if not args.input or not args.output:
@@ -362,6 +483,8 @@ def main():
         inference.process_video(args.input, args.output)
     elif args.mode == 'demo':
         run_visual_demo(config, args)
+    elif args.mode == 'test':
+        run_test_mode(config, args)
 
 if __name__ == "__main__":
     main()

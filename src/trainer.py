@@ -18,6 +18,7 @@ from src.models.frame_interpolation import create_model
 from src.data.dataset import create_data_loaders
 from src.data.ucf101_dataset import UCF101DatasetManager
 from src.data.ucf101_dataset_loader import create_ucf101_data_loaders
+from src.data.ucf101_processor import UCF101Processor
 from src.utils.logger import setup_logger
 from src.utils.memory_manager import setup_memory_optimization, clear_cuda_cache
 from src.config import Config
@@ -27,14 +28,16 @@ logger = logging.getLogger(__name__)
 class FrameInterpolationTrainer:
     """Trainer class for frame interpolation models."""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, light_loading: bool = False):
         """
         Initialize trainer.
         
         Args:
             config: Configuration object
+            light_loading: If True, use only 100 videos for faster training/testing
         """
         self.config = config
+        self.light_loading = light_loading
         self.device = self._setup_device()
         
         # Initialize model
@@ -86,27 +89,29 @@ class FrameInterpolationTrainer:
         if ucf101_config.get('enabled', False):
             logger.info("Setting up UCF101 dataset...")
             
-            # Initialize UCF101 dataset manager
-            self.ucf101_manager = UCF101DatasetManager(self.config.config)
+            # Initialize UCF101 processor
+            self.ucf101_processor = UCF101Processor(self.config.config)
             
-            # Prepare UCF101 dataset
-            if not self.ucf101_manager.prepare_dataset():
-                logger.error("Failed to prepare UCF101 dataset, falling back to standard dataset")
-                self.train_loader, self.val_loader = create_data_loaders(self.config.config)
-                return
-            
-            # Validate dataset
-            if not self.ucf101_manager.validate_dataset():
-                logger.error("UCF101 dataset validation failed, falling back to standard dataset")
-                self.train_loader, self.val_loader = create_data_loaders(self.config.config)
-                return
+            # Process UCF101 dataset if not already processed
+            if not self.ucf101_processor.is_processed():
+                logger.info("UCF101 dataset not processed, starting processing...")
+                if not self.ucf101_processor.process_dataset():
+                    logger.error("Failed to process UCF101 dataset, falling back to standard dataset")
+                    self.train_loader, self.val_loader = create_data_loaders(self.config.config)
+                    return
+            else:
+                logger.info("UCF101 dataset already processed, using existing data")
             
             # Get dataset info
-            dataset_info = self.ucf101_manager.get_dataset_info()
+            dataset_info = self.ucf101_processor.get_processed_info()
             logger.info(f"UCF101 dataset info: {dataset_info}")
             
             # Create UCF101 data loaders
-            self.train_loader, self.val_loader = create_ucf101_data_loaders(self.config.config)
+            if self.light_loading:
+                logger.info("Light loading mode enabled - limiting dataset to 100 videos")
+                self.train_loader, self.val_loader = create_ucf101_data_loaders(self.config.config, light_loading=True)
+            else:
+                self.train_loader, self.val_loader = create_ucf101_data_loaders(self.config.config)
             
             logger.info("UCF101 dataset setup completed successfully")
         else:
@@ -290,18 +295,34 @@ class FrameInterpolationTrainer:
             'config': self.config.config
         }
         
-        # Save regular checkpoint
         models_dir = Path(self.config.get('paths.models_dir', 'models'))
         models_dir.mkdir(exist_ok=True)
         
-        checkpoint_path = models_dir / f'checkpoint_epoch_{epoch}.pth'
-        torch.save(checkpoint, checkpoint_path)
-        
-        # Save best model
+        # Only save best model, no intermediate checkpoints
         if is_best:
             best_path = models_dir / 'best_model.pth'
             torch.save(checkpoint, best_path)
             logger.info(f"New best model saved with validation loss: {metrics['val_loss']:.4f}")
+            
+            # Clean up old checkpoint files to save storage space
+            self._cleanup_old_checkpoints(models_dir)
+    
+    def _cleanup_old_checkpoints(self, models_dir: Path):
+        """Clean up old checkpoint files to save storage space."""
+        try:
+            # Find all checkpoint files
+            checkpoint_files = list(models_dir.glob('checkpoint_epoch_*.pth'))
+            
+            if checkpoint_files:
+                logger.info(f"Cleaning up {len(checkpoint_files)} old checkpoint files to save storage space...")
+                
+                for checkpoint_file in checkpoint_files:
+                    checkpoint_file.unlink()
+                    logger.debug(f"Deleted {checkpoint_file}")
+                
+                logger.info("Old checkpoint cleanup completed")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup old checkpoints: {e}")
     
     def load_checkpoint(self, checkpoint_path: str):
         """Load model checkpoint."""
@@ -351,16 +372,15 @@ class FrameInterpolationTrainer:
             self.writer.add_scalar('Epoch/Val_SSIM', val_metrics['val_ssim'], epoch)
             self.writer.add_scalar('Epoch/Learning_Rate', self.optimizer.param_groups[0]['lr'], epoch)
             
-            # Save checkpoint
+            # Save checkpoint (only best model)
             is_best = val_metrics['val_loss'] < self.best_val_loss
             if is_best:
                 self.best_val_loss = val_metrics['val_loss']
                 self.patience_counter = 0
+                # Save only the best model
+                self.save_checkpoint(epoch, val_metrics, is_best)
             else:
                 self.patience_counter += 1
-            
-            if epoch % save_interval == 0 or is_best:
-                self.save_checkpoint(epoch, val_metrics, is_best)
             
             # Early stopping
             if self.patience_counter >= early_stopping_patience:

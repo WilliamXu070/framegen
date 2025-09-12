@@ -12,7 +12,7 @@ model:
 
 # Training Configuration
 training:
-  batch_size: 8  # Conservative for RTX 5070 (24GB VRAM)
+  batch_size: 10  # Conservative for RTX 5070 (24GB VRAM)
   learning_rate: 0.001
   num_epochs: 50  # Reduced for testing
   validation_split: 0.2
@@ -36,7 +36,7 @@ data:
 
 # UCF101 Dataset Configuration
 ucf101:
-  enabled: false  # Enable UCF101 dataset
+  enabled: true  # Enable UCF101 dataset
   interpolation_factor: 4  # Frames to generate between existing frames
   min_frames_per_video: 10  # Minimum frames per video
   download_from_huggingface: true  # Download from Hugging Face
@@ -72,7 +72,7 @@ logging:
 
 # Hardware Configuration
 hardware:
-  num_workers: 4  # Conservative for Windows PC
+  num_workers: 8 # Conservative for Windows PC
   pin_memory: true
   mixed_precision: false  # Disable for stability
   compile_model: false  # Disable for stability
