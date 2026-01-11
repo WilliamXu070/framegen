@@ -33,5 +33,11 @@ GPUtil>=1.4.0  # GPU monitoring
 tensorboard>=2.13.0
 wandb>=0.15.0  # Optional: Weights & Biases logging
 
+# LDMVFI dependencies
+pytorch-lightning>=1.7.0
+omegaconf>=2.2.0
+einops>=0.5.0
+# taming-transformers - Install separately: pip install git+https://github.com/CompVis/taming-transformers.git
+
 # Built-in modules (no installation needed)
 # argparse, pathlib, logging, json, os, sys, time, datetime

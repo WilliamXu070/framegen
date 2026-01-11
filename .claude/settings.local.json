@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(conda env create:*)",
+      "Bash(conda run:*)",
+      "WebSearch",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:discuss.pytorch.org)",
+      "Bash(del \"CRITICAL_RTX5070_ISSUE.md\")",
+      "Bash(timeout 5 tail:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(tail:*)",
+      "Bash(xargs cat:*)"
+    ]
+  }
+}

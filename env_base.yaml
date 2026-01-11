@@ -1,0 +1,9 @@
+name: ldmvfi_rtx5070
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - git
+  - numpy

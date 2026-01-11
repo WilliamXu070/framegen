@@ -1,0 +1,72 @@
+# Autoencoder (VQ-FIGAN) Configuration for LDMVFI
+# Stage 1: Train autoencoder first, then use it for diffusion model training
+
+model:
+  base_learning_rate: 4.5e-06
+  target: src.models.autoencoder.VQFlowNet
+  params:
+    ddconfig:
+      double_z: False
+      z_channels: 3
+      resolution: 256
+      in_channels: 3
+      out_ch: 3
+      ch: 64
+      ch_mult: [1,2,2,2,4]  # f = 2 ^ len(ch_mult)
+      num_res_blocks: 1
+      cond_type: max_cross_attn
+      attn_type: max
+      attn_resolutions: [ ]
+      dropout: 0.0
+    lossconfig:
+      target: src.models.modules.losses.vqperceptual.VQLPIPSWithDiscriminator
+      params:
+        disc_conditional: False
+        disc_in_channels: 3
+        disc_start: 0
+        disc_weight: 0.8
+        codebook_weight: 1.0
+    embed_dim: 3
+    n_embed: 8192
+    image_key: image
+    monitor: val/rec_loss
+
+data:
+  target: src.trainer_ldmvfi.DataModuleFromConfig
+  params:
+    batch_size: 8  # Larger batch size for autoencoder training
+    num_workers: 0  # Must be 0 on Windows - multiprocessing hangs at sanity check
+    wrap: false
+    train:
+      target: src.data.ldmvfi_dataset.Vimeo90kTriplet
+      params:
+        data_dir: data/vimeo_triplet
+        train: True
+        crop_sz: [256,256]
+        augment_s: True
+        augment_t: True
+    validation:
+      target: src.data.ldmvfi_dataset.Vimeo90kTriplet
+      params:
+        data_dir: data/vimeo_triplet
+        train: False
+        crop_sz: [256,256]
+        augment_s: False
+        augment_t: False
+
+lightning:
+  callbacks:
+    image_logger:
+      target: src.trainer_ldmvfi.ImageLogger
+      params:
+        batch_frequency: 500
+        val_batch_frequency: 50
+        max_images: 4
+        increase_log_steps: False
+        log_images_kwargs: {'N': 1}
+
+  trainer:
+    benchmark: True
+    max_epochs: 50
+    devices: 1  # Single GPU
+    num_sanity_val_steps: 2  # Reduce sanity check steps (was hanging)

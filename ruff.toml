@@ -1,0 +1,10 @@
+[tool.ruff]
+exclude = [
+  "LDMVFI",
+  "node_modules",
+  "src/trainer_old.py",
+  "src/trainer_progress.py",
+  "test_light_loading.py",
+  "test_training_pipeline.py",
+  "test_ucf101_processing.py",
+]

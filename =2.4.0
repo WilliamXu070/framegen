@@ -1,0 +1,46 @@
+Looking in indexes: https://download.pytorch.org/whl/cu126
+Collecting torch
+  Using cached https://download.pytorch.org/whl/cu126/torch-2.9.1%2Bcu126-cp310-cp310-win_amd64.whl.metadata (29 kB)
+Collecting torchvision
+  Using cached https://download.pytorch.org/whl/cu126/torchvision-0.24.1%2Bcu126-cp310-cp310-win_amd64.whl.metadata (6.1 kB)
+Collecting torchaudio
+  Using cached https://download.pytorch.org/whl/cu126/torchaudio-2.9.1%2Bcu126-cp310-cp310-win_amd64.whl.metadata (7.0 kB)
+Collecting filelock (from torch)
+  Downloading filelock-3.20.0-py3-none-any.whl.metadata (2.1 kB)
+Collecting typing-extensions>=4.10.0 (from torch)
+  Downloading https://download.pytorch.org/whl/typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting sympy>=1.13.3 (from torch)
+  Using cached sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+Collecting networkx>=2.5.1 (from torch)
+  Downloading networkx-3.4.2-py3-none-any.whl.metadata (6.3 kB)
+Collecting jinja2 (from torch)
+  Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting fsspec>=0.8.5 (from torch)
+  Downloading fsspec-2025.12.0-py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: numpy in c:\users\william\anaconda3\envs\ldmvfi_rtx5070\lib\site-packages (from torchvision) (2.2.6)
+Collecting pillow!=8.3.*,>=5.3.0 (from torchvision)
+  Downloading pillow-12.0.0-cp310-cp310-win_amd64.whl.metadata (9.0 kB)
+Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch)
+  Using cached mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Collecting MarkupSafe>=2.0 (from jinja2->torch)
+  Downloading https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp310-cp310-win_amd64.whl (17 kB)
+Downloading https://download.pytorch.org/whl/cu126/torch-2.9.1%2Bcu126-cp310-cp310-win_amd64.whl (2584.5 MB)
+   ---------------------------------------- 2.6/2.6 GB 21.3 MB/s  0:01:36
+Downloading https://download.pytorch.org/whl/cu126/torchvision-0.24.1%2Bcu126-cp310-cp310-win_amd64.whl (8.2 MB)
+   ---------------------------------------- 8.2/8.2 MB 23.0 MB/s  0:00:00
+Downloading https://download.pytorch.org/whl/cu126/torchaudio-2.9.1%2Bcu126-cp310-cp310-win_amd64.whl (2.0 MB)
+   ---------------------------------------- 2.0/2.0 MB 19.2 MB/s  0:00:00
+Downloading fsspec-2025.12.0-py3-none-any.whl (201 kB)
+Downloading networkx-3.4.2-py3-none-any.whl (1.7 MB)
+   ---------------------------------------- 1.7/1.7 MB 15.7 MB/s  0:00:00
+Downloading pillow-12.0.0-cp310-cp310-win_amd64.whl (7.0 MB)
+   ---------------------------------------- 7.0/7.0 MB 22.8 MB/s  0:00:00
+Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Downloading https://download.pytorch.org/whl/typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+Downloading filelock-3.20.0-py3-none-any.whl (16 kB)
+Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+Installing collected packages: mpmath, typing-extensions, sympy, pillow, networkx, MarkupSafe, fsspec, filelock, jinja2, torch, torchvision, torchaudio
+
+Successfully installed MarkupSafe-2.1.5 filelock-3.20.0 fsspec-2025.12.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.4.2 pillow-12.0.0 sympy-1.14.0 torch-2.9.1+cu126 torchaudio-2.9.1+cu126 torchvision-0.24.1+cu126 typing-extensions-4.15.0
+

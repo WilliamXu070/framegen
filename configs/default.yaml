@@ -14,11 +14,11 @@ model:
 training:
   batch_size: 10  # Conservative for RTX 5070 (24GB VRAM)
   learning_rate: 0.001
-  num_epochs: 50  # Reduced for testing
+  num_epochs: 15  # Training epochs
   validation_split: 0.2
   early_stopping_patience: 10
   save_interval: 5
-  device: "cuda"  # Options: cuda, cpu, auto
+  device: "auto"  # Options: cuda, cpu, auto (auto will use CPU if CUDA not available)
   gradient_accumulation_steps: 2  # Increased for memory efficiency
   warmup_epochs: 5
 
@@ -72,8 +72,8 @@ logging:
 
 # Hardware Configuration
 hardware:
-  num_workers: 8 # Conservative for Windows PC
-  pin_memory: true
+  num_workers: 0 # Set to 0 on Windows to avoid multiprocessing issues, 8+ on Linux
+  pin_memory: false  # Set to false on Windows when num_workers=0
   mixed_precision: false  # Disable for stability
   compile_model: false  # Disable for stability
   cuda_benchmark: true  # Enable CUDA benchmarking for RTX 5070

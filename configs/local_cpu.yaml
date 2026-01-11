@@ -1,0 +1,85 @@
+# Local CPU smoke-test configuration
+
+# Model Configuration
+model:
+  name: "FrameInterpolationNet"
+  architecture: "optical_flow_based"
+  input_channels: 3
+  output_channels: 3
+  hidden_dim: 256
+  num_layers: 4
+  dropout: 0.1
+
+# Training Configuration
+training:
+  batch_size: 2
+  learning_rate: 0.001
+  num_epochs: 1
+  validation_split: 0.2
+  early_stopping_patience: 3
+  save_interval: 1
+  device: "cpu"
+  gradient_accumulation_steps: 1
+  warmup_epochs: 0
+
+# Data Configuration
+data:
+  input_fps: 15
+  target_fps: 60
+  frame_size: [256, 256]
+  augmentation:
+    enabled: false
+    rotation_range: 0
+    brightness_range: 0.0
+    contrast_range: 0.0
+    horizontal_flip: false
+
+# UCF101 Dataset Configuration
+ucf101:
+  enabled: false
+  interpolation_factor: 4
+  min_frames_per_video: 10
+  download_from_huggingface: false
+  alternative_download: false
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  stratified_split: true
+  quality_check: true
+
+# Paths
+paths:
+  data_dir: "data"
+  models_dir: "models"
+  logs_dir: "logs"
+  output_dir: "output"
+  train_data: "data/train"
+  val_data: "data/validation"
+  test_data: "data/test"
+
+# Inference Configuration
+inference:
+  interpolation_factor: 2
+  temporal_smoothing: true
+  post_processing: true
+  quality_threshold: 0.8
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/frame_generation.log"
+
+# Hardware Configuration
+hardware:
+  num_workers: 0
+  pin_memory: false
+  mixed_precision: false
+  compile_model: false
+  cuda_benchmark: false
+  memory_efficient_attention: false
+  dataloader_pin_memory: false
+  persistent_workers: false
+  prefetch_factor: 2
+  memory_fraction: 0.8
+  allow_growth: true

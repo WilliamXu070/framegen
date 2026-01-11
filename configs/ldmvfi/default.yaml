@@ -1,0 +1,106 @@
+# LDMVFI Configuration
+# Latent Diffusion Model for Video Frame Interpolation
+
+model:
+  base_learning_rate: 1.0e-06
+  target: src.models.diffusion.ddpm.LatentDiffusionVFI
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: image
+    cond_stage_key: past_future_frames
+    image_size: 8
+    channels: 3
+    cond_stage_trainable: False
+    concat_mode: True
+    monitor: val/loss_simple_ema
+    unet_config:
+      target: src.models.modules.diffusionmodules.openaimodel.UNetModel
+      params:
+        image_size: 8  # img size of latent, used during training, determines some model params, so don't change for inference
+        in_channels: 9
+        out_channels: 3
+        model_channels: 256
+        attention_resolutions:
+        # note: this isn't actually the resolution but
+        # the downsampling factor, i.e. this corresponds to
+        # attention on spatial resolution 8,16,32, as the
+        # spatial resolution of the latents is 32 for f8
+        - 4
+        - 2
+        - 1
+        num_res_blocks: 2
+        channel_mult:
+        - 1
+        - 2
+        - 4
+        num_head_channels: 32
+        use_max_self_attn: True  # replace all full self-attention with MaxViT
+    first_stage_config:
+      target: src.models.autoencoder.VQFlowNetInterface
+      params:
+        ckpt_path: models/ldmvfi_autoencoder.ckpt  # must point to a trained autoencoder checkpoint
+        embed_dim: 3
+        n_embed: 8192
+        ddconfig:
+          double_z: False
+          z_channels: 3
+          resolution: 256
+          in_channels: 3
+          out_ch: 3
+          ch: 64
+          ch_mult: [1,2,2,2,4]  # f = 2 ^ len(ch_mult)
+          num_res_blocks: 1
+          cond_type: max_cross_attn
+          attn_type: max
+          attn_resolutions: [ ]
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_first_stage__
+
+
+data:
+  target: src.trainer_ldmvfi.DataModuleFromConfig
+  params:
+    batch_size: 4  # Reduced for RTX 5070
+    num_workers: 0  # Must be 0 on Windows - multiprocessing hangs at sanity check
+    wrap: false
+    train:
+      target: src.data.ldmvfi_dataset.Vimeo90kTriplet
+      params:
+        data_dir: data/vimeo_triplet
+        train: True
+        crop_sz: [256,256]
+        augment_s: True
+        augment_t: True
+    validation:
+      target: src.data.ldmvfi_dataset.Vimeo90kTriplet
+      params:
+        data_dir: data/vimeo_triplet
+        train: False
+        crop_sz: [256,256]
+        augment_s: False
+        augment_t: False
+
+
+lightning:
+  callbacks:
+    image_logger:
+      target: src.trainer_ldmvfi.ImageLogger
+      params:
+        batch_frequency: 250
+        val_batch_frequency: 25
+        max_images: 4
+        increase_log_steps: False
+        log_images_kwargs: {'N': 1}
+
+  trainer:
+    benchmark: True
+    max_epochs: 100
+    devices: 1  # Single GPU
+    accumulate_grad_batches: 2  # Gradient accumulation for larger effective batch size
+    num_sanity_val_steps: 2  # Reduce sanity check steps
