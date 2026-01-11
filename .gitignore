@@ -140,6 +140,10 @@ output/
 *.flv
 *.wmv
 
+# Third-party repositories (cloned, not our code)
+LDMVFI/
+third_party/taming-transformers/
+
 # IDE
 .vscode/
 .idea/
